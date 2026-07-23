@@ -18,7 +18,7 @@ services:
       - "5432:5432"
     volumes:
       - campus-pg-data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./external/campus-backend/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U campus -d campus"]
       interval: 5s
@@ -26,7 +26,7 @@ services:
       retries: 10
   ai-services:
     build:
-      context: ./services/ai-services
+      context: ./external/campus-ai-services
       dockerfile: Dockerfile
       target: runner
     container_name: campus-ai-services
@@ -49,14 +49,14 @@ services:
   # Run tests with: docker compose run --rm ai-services-test pytest
   ai-services-test:
     build:
-      context: ./services/ai-services
+      context: ./external/campus-ai-services
       dockerfile: Dockerfile
       target: test
     profiles: ["test"]
 
   backend-api:
     build:
-      context: ./services/backend-api
+      context: ./external/campus-backend
     container_name: campus-backend-api
     restart: unless-stopped
     environment:
