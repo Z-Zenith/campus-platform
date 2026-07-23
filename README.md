@@ -21,20 +21,16 @@ The platform was split from the now-archived monorepo `Z-Zenith/Omega` into one 
 
 ## Running the stack
 
-This repo builds `campus-backend` and `campus-ai-services` from source via git submodules under `external/` (BuildKit builds from the pinned submodule commits); `postgres`, `authz` (OpenFGA), and the Judge0 code-execution services come up alongside them.
+This repo builds `campus-backend` and `campus-ai-services` directly from their GitHub repos (`#main`) via Docker BuildKit git build contexts — no submodules. A one-shot `db-init-fetch` service clones the DB schema from `campus-backend@main` into a volume that postgres runs on first init, keeping the schema and the API in lockstep. `authz` (OpenFGA) and the Judge0 services come up alongside.
 
 ```bash
-git clone --recurse-submodules https://github.com/Z-Zenith/campus-platform.git
+git clone https://github.com/Z-Zenith/campus-platform.git
 cd campus-platform
 cp .env.example .env   # set POSTGRES_PASSWORD and JWT_SIGNING_KEY
-docker compose up -d
+docker compose up -d --build   # --build fetches latest main of each service
 ```
 
-If you already cloned without `--recurse-submodules`:
-
-```bash
-git submodule update --init --recursive
-```
+To rebuild against newest `main`: `docker compose build --pull` then `docker compose up -d`.
 
 ## Docs
 

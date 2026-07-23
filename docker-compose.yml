@@ -18,15 +18,32 @@ services:
       - "5432:5432"
     volumes:
       - campus-pg-data:/var/lib/postgresql/data
-      - ./external/campus-backend/db/init:/docker-entrypoint-initdb.d:ro
+      - campus-db-init:/docker-entrypoint-initdb.d:ro
+    depends_on:
+      db-init-fetch:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U campus -d campus"]
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # One-shot: clones campus-backend@main and copies its db/init into the shared
+  # campus-db-init volume that postgres runs on first init. Keeps the DB schema
+  # and the API in lockstep with the latest main, without submodules. Compose
+  # v2.2.3 rejects build.dockerfile_inline, so this fetch service is used
+  # instead of an inline Dockerfile to seed the init scripts.
+  db-init-fetch:
+    image: alpine/git:latest
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - "rm -rf /out/* && git clone --depth 1 https://github.com/Z-Zenith/campus-backend.git /tmp/backend && cp -a /tmp/backend/db/init/. /out/"
+    volumes:
+      - campus-db-init:/out
   ai-services:
     build:
-      context: ./external/campus-ai-services
+      context: https://github.com/Z-Zenith/campus-ai-services.git#main
       dockerfile: Dockerfile
       target: runner
     container_name: campus-ai-services
@@ -49,14 +66,14 @@ services:
   # Run tests with: docker compose run --rm ai-services-test pytest
   ai-services-test:
     build:
-      context: ./external/campus-ai-services
+      context: https://github.com/Z-Zenith/campus-ai-services.git#main
       dockerfile: Dockerfile
       target: test
     profiles: ["test"]
 
   backend-api:
     build:
-      context: ./external/campus-backend
+      context: https://github.com/Z-Zenith/campus-backend.git#main
     container_name: campus-backend-api
     restart: unless-stopped
     environment:
@@ -225,3 +242,4 @@ volumes:
   campus-pg-data:
   campus-judge0-db-data:
   campus-backend-keys:
+  campus-db-init:

@@ -1,6 +1,0 @@
-[submodule "external/campus-backend"]
-	path = external/campus-backend
-	url = https://github.com/Z-Zenith/campus-backend.git
-[submodule "external/campus-ai-services"]
-	path = external/campus-ai-services
-	url = https://github.com/Z-Zenith/campus-ai-services.git
