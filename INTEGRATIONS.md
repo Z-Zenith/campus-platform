@@ -30,7 +30,7 @@ known-compatible with which others.
 | campus-teacher-web | `main` @ cutover (pins the above three at `0.1.0`) |
 | campus-admin-web | `main` @ cutover (pins campus-api-client at `0.1.0`) |
 | campus-parent-portal | `main` @ cutover (pins campus-api-client at `0.1.0`) |
-| campus-student-desktop | `main` @ cutover — **host bundle integration is currently broken**: see that repo's `CLAUDE.md` (no cross-repo distribution mechanism decided yet for `dist/host/**`) |
+| campus-student-desktop | `main` (post-cutover fix) — host bundles resolved via git submodules `external/shared-editor-kit` and `external/direct-messaging`, both pinned to `host-0.1.0`; see that repo's `CLAUDE.md` |
 | campus-ai-services | `main` @ cutover |
 
 ## Bootstrap: cloning the full set
@@ -50,9 +50,10 @@ pointing at the sibling clones above, or pinned images once a publishing pipelin
 
 ## Known gaps at cutover
 
-- **campus-student-desktop**'s SEK/DMS WebView host bundle integration has no resolved
-  cross-repo distribution mechanism (git submodule vs. release asset vs. other) — tracked as a
-  follow-up, not yet a regression from pre-split behavior (it was already a manual dev
-  prerequisite before the split, per that repo's `CLAUDE.md`).
+- ~~campus-student-desktop's SEK/DMS WebView host bundle integration has no resolved cross-repo
+  distribution mechanism~~ — resolved: both are git submodules under `external/`, pinned to
+  `host-0.1.0`. Still a manual dev prerequisite (`npm run build:host` in each submodule before
+  `dotnet build`) rather than CI-wired, same as pre-split — not a new gap, just pointed at the
+  right location now.
 - No continuous publishing pipeline yet (see `repo-split-plan.md`'s non-goals) — the "current
   compatible set" above is a point-in-time record, not automatically enforced by CI.
