@@ -104,8 +104,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      authz:
-        condition: service_healthy
+      # NOTE: authz/OpenFGA is intentionally NOT a boot dependency here.
+      # No backend code consumes it — there is no OpenFGA client; RBAC is
+      # enforced in-DB via PermissionService. It stays defined and running
+      # as reference infra; re-add this dependency (and re-tighten the
+      # preshared-key interpolation below) when OpenFGA is actually wired.
       ai-services:
         condition: service_healthy
     # Defense-in-depth container ceiling (#138).
@@ -119,14 +122,16 @@ services:
     restart: unless-stopped
     environment:
       OPENFGA_AUTHN_METHOD: preshared
-      # Required — no default. Without this, any container on the compose network
-      # (backend-api, ai-services, or anything that compromises one of them) could
-      # read/write arbitrary authorization tuples on authz:8080 with no credential
-      # and no audit trail (#133). Mirrors the JWT_SIGNING_KEY fail-fast pattern
-      # used for backend-api above. Set OPENFGA_PRESHARED_KEY in the shell/.env
-      # before `docker compose up`; clients must send it as
-      # `Authorization: Bearer <key>` (see services/authz/README.md).
-      OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_PRESHARED_KEY:?Set OPENFGA_PRESHARED_KEY before starting authz}
+      # authz/OpenFGA is currently unwired reference infra — no backend code
+      # consumes it (RBAC is enforced in-DB via PermissionService), so a dev
+      # default is used here rather than a required `:?` interpolation. A
+      # required interpolation would fail the whole `docker compose up` when
+      # OPENFGA_PRESHARED_KEY is unset, for a service nothing consumes (#133).
+      # Re-tighten this back to `${OPENFGA_PRESHARED_KEY:?...}` when OpenFGA is
+      # actually wired. Set OPENFGA_PRESHARED_KEY in the shell/.env to override;
+      # clients must send it as `Authorization: Bearer <key>`
+      # (see services/authz/README.md).
+      OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_PRESHARED_KEY:-dev-openfga-preshared-key}
     command: run --datastore-engine memory --playground-enabled
     ports:
       - "127.0.0.1:8081:8080" # HTTP API — loopback-only, not for external access
@@ -163,6 +168,11 @@ services:
       POSTGRES_PASSWORD: judge0_dev
     volumes:
       - campus-judge0-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U judge0 -d judge0"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   judge0-redis:
     image: redis:7-alpine
@@ -173,6 +183,11 @@ services:
     # Internal-network-only (no published port). Rotate both together before
     # any non-dev deploy.
     command: ["redis-server", "--requirepass", "judge0_redis_dev"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "judge0_redis_dev", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # Code Execution Service (CEX) — runs untrusted student code (SEK-01).
   # Both containers below run `privileged: true`. This matches Judge0's own
@@ -204,8 +219,10 @@ services:
     ports:
       - "127.0.0.1:2358:2358" # loopback-only; backend-api reaches it over the compose network
     depends_on:
-      - judge0-db
-      - judge0-redis
+      judge0-db:
+        condition: service_healthy
+      judge0-redis:
+        condition: service_healthy
     # Container-level ceiling (#138): judge0.conf's MAX_MEMORY_LIMIT=256000 (~250MB)
     # and MAX_PROCESSES_AND_OR_THREADS=60 are per-submission caps, not an aggregate
     # one — a burst of concurrent requests on the synchronous (wait=true) path could
@@ -228,8 +245,10 @@ services:
     volumes:
       - ./services/code-execution/judge0.conf:/judge0.conf:ro
     depends_on:
-      - judge0-db
-      - judge0-redis
+      judge0-db:
+        condition: service_healthy
+      judge0-redis:
+        condition: service_healthy
     # Container-level ceiling (#138): this is where actual submission execution
     # happens (MAX_QUEUE_SIZE=100 in judge0.conf), so it needs headroom for
     # several submissions running concurrently, each up to the per-submission
