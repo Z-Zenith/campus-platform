@@ -194,6 +194,15 @@ services:
     # full host-privileged sandbox escape waiting to happen for whoever can reach
     # this container.
     privileged: true
+    # judge0.conf is a flat KEY=VALUE file (Judge0's own documented config format),
+    # which only takes effect when docker-compose loads it as the container's
+    # environment via env_file — mounting it as a plain volume (the previous config)
+    # leaves the file sitting at /judge0.conf unread, so REDIS_HOST/REDIS_PASSWORD/etc.
+    # never reach the process and every submission fails with Redis::CannotConnectError.
+    # Keep the read-only volume mount too so /judge0.conf is still present on disk for
+    # anything (docs, manual inspection) that expects to find it.
+    env_file:
+      - ./services/code-execution/judge0.conf
     volumes:
       - ./services/code-execution/judge0.conf:/judge0.conf:ro
     ports:
@@ -220,6 +229,8 @@ services:
     # sandboxing requirement, same mitigations, same warning: never relax this
     # "temporarily" and leave it relaxed.
     privileged: true
+    env_file:
+      - ./services/code-execution/judge0.conf
     volumes:
       - ./services/code-execution/judge0.conf:/judge0.conf:ro
     depends_on:
