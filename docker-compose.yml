@@ -18,7 +18,10 @@ services:
       - "5432:5432"
     volumes:
       - campus-pg-data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d:ro
+      # db/init lives in campus-backend post-split (repo-split-plan.md §2 Tier 1:
+      # `campus-backend` = `services/backend-api/` + `db/`) — sibling clone, per
+      # INTEGRATIONS.md's bootstrap flow.
+      - ../campus-backend/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U campus -d campus"]
       interval: 5s
@@ -26,7 +29,9 @@ services:
       retries: 10
   ai-services:
     build:
-      context: ./services/ai-services
+      # Sibling clone of campus-ai-services, per INTEGRATIONS.md's bootstrap flow
+      # (repo-split-plan.md §2 Tier 1) — not a subdirectory of this repo.
+      context: ../campus-ai-services
       dockerfile: Dockerfile
       target: runner
     container_name: campus-ai-services
@@ -49,14 +54,16 @@ services:
   # Run tests with: docker compose run --rm ai-services-test pytest
   ai-services-test:
     build:
-      context: ./services/ai-services
+      context: ../campus-ai-services
       dockerfile: Dockerfile
       target: test
     profiles: ["test"]
 
   backend-api:
     build:
-      context: ./services/backend-api
+      # Sibling clone of campus-backend, per INTEGRATIONS.md's bootstrap flow
+      # (repo-split-plan.md §2 Tier 1) — not a subdirectory of this repo.
+      context: ../campus-backend
     container_name: campus-backend-api
     restart: unless-stopped
     environment:

@@ -8,60 +8,59 @@ Written for two people new to both git and Claude Code. Claude Code is already i
 
 ## 1. Repo Setup
 
-One person does this once; the other clones it.
+**Historical note:** this section originally described bootstrapping a single monorepo —
+`mkdir -p apps/... services/backend-api services/ai-services... packages/...` inside
+`campus-platform` itself. That layout was real early on, but the project has since gone
+through the multirepo split described in `repo-split-plan.md`. `campus-platform` is now
+the **orchestrator only** (`docker-compose.yml`, `.env.example`, `docs/`,
+`services/authz/`, `services/code-execution/`) — it no longer contains `apps/`,
+`packages/`, or `services/backend-api`/`services/ai-services`. Those moved to their own
+repos. What follows is the current setup flow; see `INTEGRATIONS.md` for the authoritative
+bootstrap section and the repo/version compatibility matrix, and `repo-split-plan.md` §2
+and §6 for why the layout looks like this.
+
+Clone `campus-platform` and the nine sibling repos next to each other in the same parent
+folder — this mirrors the containers in Section 0/7 of the architecture doc, so "where
+does this code go" is never a guess:
 
 ```bash
-# Person A: create and push the repo (do this on GitHub.com first: New Repository → "campus-platform" → do NOT initialize with a README)
-git clone git@github.com:<your-org-or-username>/campus-platform.git
-cd campus-platform
-```
+git clone https://github.com/<your-org-or-username>/campus-platform.git
 
-Create the folder structure — this mirrors the containers in Section 0/7 of the architecture doc, so "where does this code go" is never a guess:
-
-```bash
-mkdir -p apps/student-desktop apps/teacher-web apps/admin-web apps/parent-portal
-mkdir -p services/backend-api services/ai-services services/authz
-mkdir -p packages/shared-editor-kit packages/direct-messaging
-mkdir -p docs
+for repo in campus-admin-web campus-teacher-web campus-parent-portal campus-student-desktop \
+            campus-ai-services campus-backend campus-api-client campus-shared-editor-kit \
+            campus-direct-messaging; do
+  git clone "https://github.com/<your-org-or-username>/$repo.git"
+done
 ```
 
 ```
-campus-platform/
-├── CLAUDE.md                      ← Claude Code reads this automatically, every session
-├── README.md
-├── .gitignore
-├── docs/
-│   ├── architecture.md            ← copy of campus-platform-architecture.md
-│   └── work-division.md           ← copy of this file
-├── apps/
-│   ├── student-desktop/           ← SDA (Avalonia/.NET)
-│   ├── teacher-web/                ← TWA
-│   ├── admin-web/                  ← AWA
-│   └── parent-portal/              ← PRT
-├── services/
-│   ├── backend-api/                ← API
-│   ├── ai-services/                 ← AIS
-│   └── authz/                       ← OpenFGA schema/config
-└── packages/
-    ├── shared-editor-kit/           ← SEK (consumed by student-desktop and teacher-web)
-    └── direct-messaging/            ← DMS (consumed by student-desktop and teacher-web)
+<parent-folder>/
+├── campus-platform/            ← orchestrator: docker-compose.yml, docs/, services/authz/, services/code-execution/
+├── campus-student-desktop/     ← SDA (Avalonia/.NET)
+├── campus-teacher-web/         ← TWA
+├── campus-admin-web/           ← AWA
+├── campus-parent-portal/       ← PRT
+├── campus-backend/             ← API (+ db/ — schema/seed SQL now lives here, not in campus-platform)
+├── campus-ai-services/         ← AIS
+├── campus-api-client/          ← shared TS API client, consumed by the three web apps
+├── campus-shared-editor-kit/   ← SEK (consumed by student-desktop and teacher-web)
+└── campus-direct-messaging/    ← DMS (consumed by student-desktop and teacher-web)
 ```
 
-Copy the two docs in, write a one-paragraph README, add a `.gitignore` (use [gitignore.io](https://gitignore.io) for whatever languages you land on in Week 0 — see Section 3), then:
+Each repo has its own `CLAUDE.md`, README, `.gitignore`, and git history — there's no
+single top-level `git add . && git commit` across all ten; work happens inside whichever
+repo the feature belongs to, per its own branch/PR flow (Section 2 below).
 
-```bash
-git add .
-git commit -m "chore: initial repo structure"
-git push origin main
-```
+From `campus-platform`, copy `.env.example` to `.env` and fill in the required secrets,
+then `docker compose up -d` brings up Postgres, OpenFGA (`services/authz/`), the
+Judge0-based Code Execution Service (`services/code-execution/`), and — via `build:`
+contexts pointing at the sibling clones above (`../campus-backend`,
+`../campus-ai-services`) — `campus-backend` and `campus-ai-services`.
 
-**On GitHub:** Settings → Branches → add a rule for `main` requiring at least one pull-request review before merging. This is the one guardrail worth setting up on day one — it makes "accidentally pushed broken code straight to main" impossible for both of you.
-
-```bash
-# Person B: clone it
-git clone git@github.com:<your-org-or-username>/campus-platform.git
-cd campus-platform
-```
+**On GitHub, for each repo you push to:** Settings → Branches → add a rule for `main`
+requiring at least one pull-request review before merging. This is the one guardrail
+worth setting up on day one — it makes "accidentally pushed broken code straight to main"
+impossible for both of you.
 
 ---
 
