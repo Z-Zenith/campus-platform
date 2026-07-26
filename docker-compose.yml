@@ -119,10 +119,13 @@ services:
       # before `docker compose up`; clients must send it as
       # `Authorization: Bearer <key>` (see services/authz/README.md).
       OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_PRESHARED_KEY:?Set OPENFGA_PRESHARED_KEY before starting authz}
-    command: run --datastore-engine memory --playground-enabled
+    # --playground-enabled is incompatible with preshared auth (OpenFGA panics
+    # at startup: "the playground only supports authn method 'none'") — dropped
+    # rather than relaxing OPENFGA_AUTHN_METHOD, since the preshared key is the
+    # security-load-bearing part (#133), not the playground UI.
+    command: run --datastore-engine memory
     ports:
       - "127.0.0.1:8081:8080" # HTTP API — loopback-only, not for external access
-      - "127.0.0.1:8082:3000" # Playground UI, dev convenience only
     healthcheck:
       # openfga's image (cgr.dev/chainguard/static) is distroless — no shell, no
       # curl/wget. The only probe binary it ships is grpc_health_probe, which
