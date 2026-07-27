@@ -84,6 +84,8 @@ services:
       Copyleaks__Email: "${COPYLEAKS_EMAIL:-}"
       Copyleaks__ApiKey: "${COPYLEAKS_API_KEY:-}"
       Copyleaks__WebhookSecret: "${COPYLEAKS_WEBHOOK_SECRET:-}"
+      # AIS-05: Pangram credentials — same fail-closed-503 pattern as Copyleaks above.
+      Pangram__ApiKey: "${PANGRAM_API_KEY:-}"
     ports:
       - "8080:8080"
     volumes:
@@ -117,10 +119,13 @@ services:
       # before `docker compose up`; clients must send it as
       # `Authorization: Bearer <key>` (see services/authz/README.md).
       OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_PRESHARED_KEY:?Set OPENFGA_PRESHARED_KEY before starting authz}
-    command: run --datastore-engine memory --playground-enabled
+    # --playground-enabled is incompatible with preshared auth (OpenFGA panics
+    # at startup: "the playground only supports authn method 'none'") — dropped
+    # rather than relaxing OPENFGA_AUTHN_METHOD, since the preshared key is the
+    # security-load-bearing part (#133), not the playground UI.
+    command: run --datastore-engine memory
     ports:
       - "127.0.0.1:8081:8080" # HTTP API — loopback-only, not for external access
-      - "127.0.0.1:8082:3000" # Playground UI, dev convenience only
     healthcheck:
       # openfga's image (cgr.dev/chainguard/static) is distroless — no shell, no
       # curl/wget. The only probe binary it ships is grpc_health_probe, which
@@ -189,6 +194,15 @@ services:
     # full host-privileged sandbox escape waiting to happen for whoever can reach
     # this container.
     privileged: true
+    # judge0.conf is a flat KEY=VALUE file (Judge0's own documented config format),
+    # which only takes effect when docker-compose loads it as the container's
+    # environment via env_file — mounting it as a plain volume (the previous config)
+    # leaves the file sitting at /judge0.conf unread, so REDIS_HOST/REDIS_PASSWORD/etc.
+    # never reach the process and every submission fails with Redis::CannotConnectError.
+    # Keep the read-only volume mount too so /judge0.conf is still present on disk for
+    # anything (docs, manual inspection) that expects to find it.
+    env_file:
+      - ./services/code-execution/judge0.conf
     volumes:
       - ./services/code-execution/judge0.conf:/judge0.conf:ro
     ports:
@@ -215,6 +229,8 @@ services:
     # sandboxing requirement, same mitigations, same warning: never relax this
     # "temporarily" and leave it relaxed.
     privileged: true
+    env_file:
+      - ./services/code-execution/judge0.conf
     volumes:
       - ./services/code-execution/judge0.conf:/judge0.conf:ro
     depends_on:
