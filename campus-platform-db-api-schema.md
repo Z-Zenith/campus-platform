@@ -282,6 +282,8 @@ Database: PostgreSQL. Backend: ASP.NET Core + EF Core (so these tables map direc
 **`notes`** — `id`, `owner_id` FK → users, `title`, `content_markdown`, `created_at`, `updated_at` (SEK-03)
 **`note_links`** — `id`, `from_note_id` FK, `to_note_id` FK, `anchor` text (not null), `created_at` timestamptz (not null, default now()) (SEK-03)
 **`documents`** — `id`, `owner_id` FK, `file_url`, `doc_type` enum(pdf, pptx, docx), `annotations` jsonb, `page_count` int (nullable), `ocr_status` enum/text(pending, processing, completed, failed, not_applicable) (not null, default pending) (SEK-02)
+**`code_projects`** — `id`, `owner_id` FK → users, `name`, `entry_file_path`, `active_file_path`, `stdin` (not null, default ''), `created_at`, `updated_at` (SEK-01 — a student's saved multi-file Coding project; added in the 0.2.0 "VS Code-style editor" contract change, replacing the pre-0.2.0 scratch-only single-buffer editor)
+**`code_files`** — `id`, `project_id` FK → code_projects (on delete cascade), `path` text (not null), `language` text (not null — plain text, not an enum: validated app-side by `isSupportedLanguage`, see Open Items), `content` text (not null, default ''), `created_at`, `updated_at`, unique(`project_id`, `path`) (SEK-01)
 
 ### 1.10 Direct Messaging
 
@@ -373,6 +375,16 @@ All routes prefixed `/api/v1`. Every write endpoint checks the caller's effectiv
 | POST | `/marks/external/{id}/approve` | TWA-20 |
 | GET | `/marks/mine` | SDA-15 |
 | GET | `/marks/ward/{studentId}` | PRT-02 |
+
+### Coding (SEK-01)
+| Method | Path | Feature |
+|---|---|---|
+| POST | `/code/run` | SEK-01 |
+| GET | `/code/projects/mine` | SEK-01 |
+| GET | `/code/projects/{id}` | SEK-01 |
+| POST | `/code/projects` | SEK-01 |
+| PATCH | `/code/projects/{id}` | SEK-01 |
+| DELETE | `/code/projects/{id}` | SEK-01 |
 
 ### Notes
 | Method | Path | Feature |
@@ -468,3 +480,4 @@ All routes prefixed `/api/v1`. Every write endpoint checks the caller's effectiv
 | 2026-07-05 | Open Items | Code review follow-up: flagged this schema change as pending shared-log sign-off per the contract-change rule; noted `DocumentDescriptor.title` was made optional in the SEK interface to match the still-unresolved title-derivation question. | SEK-02 |
 | 2026-07-05 | Open Items | Contract-change sign-off received from Track 2 for the `note_links`/`documents` column additions (`anchor`, `created_at`, `page_count`, `ocr_status`) — moved from pending to resolved. | SEK-02, SEK-03 |
 | 2026-07-05 | 1.9, db/init/01_schema.sql | Applied the approved `note_links`/`documents` column additions to the actual SQL schema — the sign-off above covered the interface/docs change but the migration itself hadn't landed yet. Added `ocr_status` enum type (`pending`, `processing`, `completed`, `failed`, `not_applicable`). | SEK-02, SEK-03 |
+| 2026-07-27 | 1.9, Coding endpoints, db/init/01_schema.sql | SEK-01 rebuilt from a scratch single-buffer textarea into a VS Code-style (Monaco-powered) multi-file editor with persistence — a deliberate breaking contract change (`CodeSource` → `CodeProject`/`CodeFile`). Added `code_projects`/`code_files` tables and `/code/projects*` CRUD endpoints alongside the existing `/code/run` (now project-shaped, with `additional_files` submitted to Judge0 for non-entry files). No cross-track sign-off needed — Track 2 owns SEK-01 and its only real consumer (SDA-19); logged here per the contract-change convention. | SEK-01 |
