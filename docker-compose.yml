@@ -1,32 +1,57 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: campus-postgres
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: campus-mssql
     restart: unless-stopped
     environment:
-      POSTGRES_DB: campus
-      POSTGRES_USER: campus
-      # Required — no default. Mirrors the JWT_SIGNING_KEY fail-fast pattern
-      # below: set POSTGRES_PASSWORD in the shell/.env before `docker compose
-      # up` (see .env.example). Also read by db/init/03_create_app_role.sh to
-      # provision the least-privilege campus_app role (#137).
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD before starting postgres}
-      # Dev-only default documented in .env.example; rotate before any
-      # non-dev deploy. See db/init/03_create_app_role.sh (#137).
-      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-campus_app_dev}
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      # Required — no default. Mirrors the JWT_SIGNING_KEY fail-fast pattern below: set
+      # MSSQL_SA_PASSWORD in the shell/.env before `docker compose up` (see .env.example).
+      # Also read by db/init/03_create_app_role.sql (via mssql-init below) to provision the
+      # least-privilege campus_app login (#137).
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD before starting mssql}
     ports:
-      - "5432:5432"
+      - "1433:1433"
     volumes:
-      - campus-pg-data:/var/lib/postgresql/data
+      - campus-mssql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -No -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Migrated off the postgres image (which auto-applied db/init/*.sql via its own
+  # docker-entrypoint-initdb.d on first boot) — mcr.microsoft.com/mssql/server has no
+  # equivalent auto-init mechanism, so this one-shot sidecar applies the same files via
+  # sqlcmd once `mssql` reports healthy, then exits. Re-running `docker compose up` is safe:
+  # every file under db/init/ is itself idempotent (IF NOT EXISTS guards).
+  mssql-init:
+    image: mcr.microsoft.com/mssql-tools18:latest
+    container_name: campus-mssql-init
+    depends_on:
+      mssql:
+        condition: service_healthy
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD before starting mssql}
+      # Dev-only default documented in .env.example; rotate before any non-dev deploy. See
+      # db/init/03_create_app_role.sql (#137).
+      MSSQL_APP_PASSWORD: ${MSSQL_APP_PASSWORD:-campus_app_dev}
+    volumes:
       # db/init lives in campus-backend post-split (repo-split-plan.md §2 Tier 1:
       # `campus-backend` = `services/backend-api/` + `db/`) — sibling clone, per
       # INTEGRATIONS.md's bootstrap flow.
-      - ../campus-backend/db/init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U campus -d campus"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      - ../campus-backend/db/init:/init:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        for f in /init/*.sql; do
+          echo "Applying $$f";
+          /opt/mssql-tools18/bin/sqlcmd -S mssql -U sa -P "$$MSSQL_SA_PASSWORD" -C -No \
+            -v APP_PASSWORD="$$MSSQL_APP_PASSWORD" -i "$$f";
+        done
+    restart: "no"
   ai-services:
     build:
       # Sibling clone of campus-ai-services, per INTEGRATIONS.md's bootstrap flow
@@ -67,13 +92,13 @@ services:
     container_name: campus-backend-api
     restart: unless-stopped
     environment:
-      # Cut over to the least-privilege campus_app role (#137) provisioned by
-      # db/init/03_create_app_role.sh instead of the campus superuser — backend-api
+      # Cut over to the least-privilege campus_app login (#137) provisioned by
+      # db/init/03_create_app_role.sql instead of the sa admin login — backend-api
       # only ever does row-level CRUD, never DDL/role/database administration.
-      # POSTGRES_APP_PASSWORD is required (see postgres service above) and reused
+      # MSSQL_APP_PASSWORD is required (see mssql-init service above) and reused
       # here so the two never drift. Program.cs also fails fast outside Development
       # if this still resolves to the committed appsettings.json dev placeholder.
-      ConnectionStrings__Campus: "Host=postgres;Port=5432;Database=campus;Username=campus_app;Password=${POSTGRES_APP_PASSWORD:-campus_app_dev}"
+      ConnectionStrings__Campus: "Server=mssql,1433;Database=campus;User Id=campus_app;Password=${MSSQL_APP_PASSWORD:-campus_app_dev};TrustServerCertificate=true"
       # Required in non-Development environments — backend-api fails fast at startup if unset.
       # Set JWT_SIGNING_KEY in the shell/.env before `docker compose up`; never commit a real value.
       Jwt__Key: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY before starting backend-api}
@@ -94,8 +119,16 @@ services:
       # undecryptable (and thus unusable for login) the moment the container is recreated.
       - campus-backend-keys:/keys
     depends_on:
-      postgres:
+      mssql:
         condition: service_healthy
+      # Requires Docker Compose v2.20+ / Compose Spec with service_completed_successfully
+      # support — waits for the one-shot schema-init sidecar to actually finish applying
+      # db/init/*.sql, not just for `mssql` itself to accept connections (which alone doesn't
+      # mean the `campus` database/schema/app login exist yet). On an older Compose that
+      # doesn't support this condition, run `docker compose up mssql-init` to completion
+      # manually before starting backend-api.
+      mssql-init:
+        condition: service_completed_successfully
       authz:
         condition: service_healthy
       ai-services:
@@ -140,111 +173,18 @@ services:
       timeout: 5s
       retries: 5
 
-  judge0-db:
-    image: postgres:16-alpine
-    container_name: campus-judge0-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: judge0
-      POSTGRES_USER: judge0
-      # Hardcoded dev-only credential (#137). Not env-var-templated like the main
-      # postgres/authz services above: this password must stay byte-for-byte
-      # identical to POSTGRES_PASSWORD in services/code-execution/judge0.conf,
-      # which judge0.conf's flat key=value format can't pull from a shell/.env
-      # var at container-init time the way docker-compose.yml can. No port is
-      # published (internal-network-only, reachable only by judge0-server/workers)
-      # which limits the blast radius, but rotate this — and the matching value
-      # in judge0.conf — together before any non-dev deploy.
-      POSTGRES_PASSWORD: judge0_dev
-    volumes:
-      - campus-judge0-db-data:/var/lib/postgresql/data
-
-  judge0-redis:
-    image: redis:7-alpine
-    container_name: campus-judge0-redis
-    restart: unless-stopped
-    # Hardcoded dev-only credential (#137), same constraint as judge0-db above:
-    # must match REDIS_PASSWORD in services/code-execution/judge0.conf exactly.
-    # Internal-network-only (no published port). Rotate both together before
-    # any non-dev deploy.
-    command: ["redis-server", "--requirepass", "judge0_redis_dev"]
-
-  # Code Execution Service (CEX) — runs untrusted student code (SEK-01).
-  # Both containers below run `privileged: true`. This matches Judge0's own
-  # reference docker-compose: isolate's cgroup/namespace sandboxing needs it
-  # even on judge0-server's synchronous (wait=true) request path, not just
-  # in judge0-workers. That's a real, deliberate privilege-escalation this
-  # stack accepts — it's contained by everything else here: no port is
-  # published on judge0-workers (unreachable from the host or any other
-  # service), judge0-server's port is loopback-only, and every submission
-  # is bound by judge0.conf's hard resource ceilings and
-  # ENABLE_NETWORK=false, so even with host-level privileges available to
-  # the *container*, a submission running inside an isolate box still can't
-  # reach the network, exceed its CPU/memory/process limits, or persist
-  # beyond its box.
-  judge0-server:
-    image: judge0/judge0:1.13.1
-    container_name: campus-judge0-server
-    restart: unless-stopped
-    # SECURITY-LOAD-BEARING (#95): required for isolate's sandboxing, mitigated by
-    # everything documented in the block comment above (loopback-only port,
-    # judge0.conf's resource ceilings, ENABLE_NETWORK=false). Do NOT flip this to
-    # `false` "temporarily for debugging" and forget to revert it — and do not
-    # relax it without re-reviewing the mitigations, since without them this is a
-    # full host-privileged sandbox escape waiting to happen for whoever can reach
-    # this container.
-    privileged: true
-    # judge0.conf is a flat KEY=VALUE file (Judge0's own documented config format),
-    # which only takes effect when docker-compose loads it as the container's
-    # environment via env_file — mounting it as a plain volume (the previous config)
-    # leaves the file sitting at /judge0.conf unread, so REDIS_HOST/REDIS_PASSWORD/etc.
-    # never reach the process and every submission fails with Redis::CannotConnectError.
-    # Keep the read-only volume mount too so /judge0.conf is still present on disk for
-    # anything (docs, manual inspection) that expects to find it.
-    env_file:
-      - ./services/code-execution/judge0.conf
-    volumes:
-      - ./services/code-execution/judge0.conf:/judge0.conf:ro
-    ports:
-      - "127.0.0.1:2358:2358" # loopback-only; backend-api reaches it over the compose network
-    depends_on:
-      - judge0-db
-      - judge0-redis
-    # Container-level ceiling (#138): judge0.conf's MAX_MEMORY_LIMIT=256000 (~250MB)
-    # and MAX_PROCESSES_AND_OR_THREADS=60 are per-submission caps, not an aggregate
-    # one — a burst of concurrent requests on the synchronous (wait=true) path could
-    # otherwise each stay within their own ceiling while exhausting the host in
-    # aggregate. Sized for a handful of concurrent synchronous requests plus isolate
-    # overhead, not just one.
-    mem_limit: 1.5g
-    cpus: 1.5
-    pids_limit: 512
-
-  judge0-workers:
-    image: judge0/judge0:1.13.1
-    container_name: campus-judge0-workers
-    restart: unless-stopped
-    command: ["./scripts/workers"]
-    # SECURITY-LOAD-BEARING (#95): see judge0-server above — same isolate
-    # sandboxing requirement, same mitigations, same warning: never relax this
-    # "temporarily" and leave it relaxed.
-    privileged: true
-    env_file:
-      - ./services/code-execution/judge0.conf
-    volumes:
-      - ./services/code-execution/judge0.conf:/judge0.conf:ro
-    depends_on:
-      - judge0-db
-      - judge0-redis
-    # Container-level ceiling (#138): this is where actual submission execution
-    # happens (MAX_QUEUE_SIZE=100 in judge0.conf), so it needs headroom for
-    # several submissions running concurrently, each up to the per-submission
-    # ceilings above — not just one submission's worth of memory/PIDs.
-    mem_limit: 3g
-    cpus: 2.0
-    pids_limit: 1024
+  # judge0-db/judge0-redis/judge0-server/judge0-workers (the Code Execution Service, SEK-01)
+  # removed — campus-backend#91ab918 replaced Judge0 with Services/DockerCodeRunner.cs
+  # (shells out to `docker run` directly), leaving judge0-* running but unused ("left in place
+  # rather than removed as part of this change, since nothing here depends on deleting them" —
+  # see that commit and campus-backend/CLAUDE.md's SEK-01 section). judge0-db was the last
+  # Postgres instance left on this platform once campus-backend's own DB moved to SQL Server
+  # (see mssql/mssql-init above), so removing this dead stack was necessary to actually finish
+  # that migration, not unrelated cleanup. services/code-execution/judge0.conf is left in place
+  # (unread now, same as the commit above left the images running unused) — deleting it wasn't
+  # required for this change and is a smaller, separate cleanup if anyone wants Judge0's
+  # remnants fully gone from the repo, not just from the running stack.
 
 volumes:
-  campus-pg-data:
-  campus-judge0-db-data:
+  campus-mssql-data:
   campus-backend-keys:

@@ -52,8 +52,9 @@ single top-level `git add . && git commit` across all ten; work happens inside w
 repo the feature belongs to, per its own branch/PR flow (Section 2 below).
 
 From `campus-platform`, copy `.env.example` to `.env` and fill in the required secrets,
-then `docker compose up -d` brings up Postgres, OpenFGA (`services/authz/`), the
-Judge0-based Code Execution Service (`services/code-execution/`), and — via `build:`
+then `docker compose up -d` brings up SQL Server (migrated off Postgres — see
+`campus-backend/MIGRATIONS.md`; the Judge0-based Code Execution Service is gone too, replaced
+by `campus-backend`'s `DockerCodeRunner`), OpenFGA (`services/authz/`), and — via `build:`
 contexts pointing at the sibling clones above (`../campus-backend`,
 `../campus-ai-services`) — `campus-backend` and `campus-ai-services`.
 

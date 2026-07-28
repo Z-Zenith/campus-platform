@@ -3,8 +3,9 @@ model
 
 # STATUS: not currently invoked by Backend API. No OpenFGA client exists in
 # services/backend-api — every permission check is enforced directly against
-# the role_bindings/roles/permission_grants Postgres tables by
-# Services/PermissionService.cs. This file documents the intended ReBAC shape
+# the role_bindings/roles/permission_grants tables (SQL Server — migrated off
+# Postgres, see campus-backend/MIGRATIONS.md) by Services/PermissionService.cs.
+# This file documents the intended ReBAC shape
 # (see services/authz/README.md) but is not a live source of authorization
 # truth; treat PermissionService.cs as authoritative. See #76.
 #

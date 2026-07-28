@@ -2,7 +2,8 @@
 
 > **Status: not currently invoked.** `Backend API` enforces every permission
 > check directly against the `role_bindings`/`roles`/`permission_grants`
-> Postgres tables via `Services/PermissionService.cs` — no OpenFGA client
+> tables (SQL Server — migrated off Postgres, see
+> `campus-backend/MIGRATIONS.md`) via `Services/PermissionService.cs` — no OpenFGA client
 > exists anywhere in `services/backend-api` (see #76). `model.fga` below
 > documents the intended ReBAC shape and stays in the repo as a reference for
 > the permission catalog, but it is not loaded into a running store by any

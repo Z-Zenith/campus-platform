@@ -405,8 +405,8 @@ Decided: Docker for every server-side container. Docker Compose for orchestratio
 | Backend API | Yes | Own Dockerfile |
 | AI Services | Yes | Self-hosted models (AIS-01/03/04/07) run here; Copyleaks/Pangram (AIS-02/05) are called out to as external APIs, not containers themselves |
 | Authorization Service (OpenFGA) | Yes | Official OpenFGA Docker image |
-| Code Execution Service (Judge0/Piston) | Yes | Official Docker image; this is the one container that runs *untrusted* code (student submissions) — needs its own sandboxing/resource-limit configuration, don't just run it with default settings |
-| Database (PostgreSQL) | Yes | Official Postgres Docker image; volume-mounted for persistence, not ephemeral |
+| Code Execution Service | No (as of `campus-backend` commit `91ab918`) | Judge0/Piston row above described the original plan; superseded by `campus-backend`'s `DockerCodeRunner`, which shells out to `docker run` per submission instead of a standing service — see that repo's `CLAUDE.md` SEK-01 section |
+| Database (SQL Server) | Yes | Official `mcr.microsoft.com/mssql/server` Docker image; volume-mounted for persistence, not ephemeral. Migrated off PostgreSQL — see `campus-backend/MIGRATIONS.md` |
 | Teacher Web App, Admin Web App, Parent Portal | Yes, in prod | Built as static bundles, served via an nginx container; in Dev, run via Vite's own dev server instead (outside Docker) for fast hot-reload against the Dockerized backend |
 | Student Desktop App | **No** | Native Avalonia app, distributed as a platform installer — not a server-side service, nothing to containerize |
 

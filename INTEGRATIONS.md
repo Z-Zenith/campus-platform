@@ -43,10 +43,11 @@ for repo in campus-admin-web campus-teacher-web campus-parent-portal campus-stud
 done
 ```
 
-Then `docker compose up -d` from this repo brings up Postgres, OpenFGA (`services/authz/`),
-the Judge0-based Code Execution Service (`services/code-execution/`), and — via `build:` contexts
-pointing at the sibling clones above, or pinned images once a publishing pipeline exists —
-`campus-backend` and `campus-ai-services`.
+Then `docker compose up -d` from this repo brings up SQL Server (migrated off Postgres — see
+`campus-backend/MIGRATIONS.md`; the Judge0-based Code Execution Service is gone too, replaced
+by `campus-backend`'s `DockerCodeRunner`), OpenFGA (`services/authz/`), and — via `build:`
+contexts pointing at the sibling clones above, or pinned images once a publishing pipeline
+exists — `campus-backend` and `campus-ai-services`.
 
 ## Known gaps at cutover
 
