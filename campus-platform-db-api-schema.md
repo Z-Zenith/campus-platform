@@ -267,7 +267,7 @@ Database: PostgreSQL. Backend: ASP.NET Core + EF Core (so these tables map direc
 | restricted_departments | uuid[], nullable | |
 
 **`event_registrations`** — `id`, `event_id` FK, `student_id` FK, `registered_at`
-**`todos`** — `id`, `student_id` FK, `title`, `due_date`, `completed` (SDA-14)
+**`todos`** — `id`, `student_id` FK, `title`, `due_date`, `completed`, `priority` int 0-3 (None/Low/Medium/High, `CHECK` constraint, default 0), `created_at` (SDA-14)
 **`custom_calendar_entries`** — `id`, `student_id` FK, `title`, `entry_date` (SDA-14)
 
 ### 1.8 Browser & Whitelist
@@ -426,7 +426,14 @@ All routes prefixed `/api/v1`. Every write endpoint checks the caller's effectiv
 | POST | `/events` | TWA-15, AWA-11 |
 | GET | `/events` | SDA-20 (filtered by year/department eligibility) |
 | POST | `/events/{id}/register` | SDA-20 |
-| GET | `/calendar/mine` | SDA-14 |
+| GET | `/calendar/mine` | SDA-14 (dated items only — todos with a null `due_date` are omitted, see #159) |
+| GET | `/todos/mine` | SDA-14 (all todos, dated and undated — the desktop app's standalone Todos list reads from this, not `calendar/mine`) |
+| POST | `/todos` | SDA-14 |
+| PATCH | `/todos/{id}` | SDA-14 (edit title/due date/priority) |
+| PATCH | `/todos/{id}/complete` | SDA-14 |
+| DELETE | `/todos/{id}` | SDA-14 |
+| POST | `/calendar/custom-entries` | SDA-14 |
+| DELETE | `/calendar/custom-entries/{id}` | SDA-14 |
 
 ### Browser & Behaviour
 | Method | Path | Feature |
@@ -481,3 +488,4 @@ All routes prefixed `/api/v1`. Every write endpoint checks the caller's effectiv
 | 2026-07-05 | Open Items | Contract-change sign-off received from Track 2 for the `note_links`/`documents` column additions (`anchor`, `created_at`, `page_count`, `ocr_status`) — moved from pending to resolved. | SEK-02, SEK-03 |
 | 2026-07-05 | 1.9, db/init/01_schema.sql | Applied the approved `note_links`/`documents` column additions to the actual SQL schema — the sign-off above covered the interface/docs change but the migration itself hadn't landed yet. Added `ocr_status` enum type (`pending`, `processing`, `completed`, `failed`, `not_applicable`). | SEK-02, SEK-03 |
 | 2026-07-27 | 1.9, Coding endpoints, db/init/01_schema.sql | SEK-01 rebuilt from a scratch single-buffer textarea into a VS Code-style (Monaco-powered) multi-file editor with persistence — a deliberate breaking contract change (`CodeSource` → `CodeProject`/`CodeFile`). Added `code_projects`/`code_files` tables and `/code/projects*` CRUD endpoints alongside the existing `/code/run` (now project-shaped, with `additional_files` submitted to Judge0 for non-entry files). No cross-track sign-off needed — Track 2 owns SEK-01 and its only real consumer (SDA-19); logged here per the contract-change convention. | SEK-01 |
+| 2026-07-29 | 1.7, Calendar & Events endpoints, db/init/01_schema.sql | Fixed a real bug: the desktop Todos quick-add always creates undated todos, but `calendar/mine` omits undated todos by design (#159) — they were permanently invisible. Added `GET /todos/mine` (all todos, dated and undated) as the correct read path for the standalone Todos list; `calendar/mine`'s existing dated-only filter is unchanged. Also fixed `ThisWeeksClassSessionsAsync` to use `CollegeClock` (college-local "today") instead of raw UTC, same class of fix as #152. Added `priority` (int 0-3) and `created_at` columns to `todos`, plus `PATCH /todos/{id}` for editing title/due date/priority. **SDA-14 is Track 1 territory** — this change was made by Track 2 with the repo owner's explicit go-ahead; flagging here per the contract-change protocol for Track 1 awareness/sign-off. | SDA-14 |
