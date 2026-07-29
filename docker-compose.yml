@@ -89,6 +89,18 @@ services:
       Copyleaks__WebhookSecret: "${COPYLEAKS_WEBHOOK_SECRET:-}"
       # AIS-05: Pangram credentials — same fail-closed-503 pattern as Copyleaks above.
       Pangram__ApiKey: "${PANGRAM_API_KEY:-}"
+      # SEK-01 Docker-outside-of-Docker (see campus-backend/Services/DockerCodeRunner.cs and
+      # docker-entrypoint.sh): `docker run -v` below is resolved by the HOST daemon (reached
+      # over the bind-mounted socket), so DockerCodeRunner needs the actual host-filesystem
+      # path of the coderun-tmp bind mount below, not its own container-side view of it
+      # (/coderun-tmp) — the two only coincide when this process runs on the host directly
+      # (bare `dotnet run`), which is why this is required only for the containerized
+      # deployment, not a hardcoded default. Set to this compose file's directory + /coderun-tmp,
+      # e.g. (from campus-platform/) on Linux/macOS: CODERUN_HOST_TEMP_DIR="$(pwd)/coderun-tmp";
+      # on Windows: an absolute path Docker Desktop resolves bind-mount sources against (test it
+      # actually works before relying on it — Docker Desktop's host-path resolution varies by
+      # backend/version).
+      CodeRunner__HostTempDir: ${CODERUN_HOST_TEMP_DIR:?Set CODERUN_HOST_TEMP_DIR (this compose file's directory + /coderun-tmp, as an absolute host path) before starting a containerized backend-api that needs to run student code}
     ports:
       - "8080:8080"
     volumes:
@@ -96,6 +108,20 @@ services:
       # restarts/redeploys — without this, every existing user's TotpSecret would become
       # undecryptable (and thus unusable for login) the moment the container is recreated.
       - campus-backend-keys:/keys
+      # Docker-outside-of-Docker (see CodeRunner__HostTempDir above and docker-entrypoint.sh):
+      # grants backend-api's docker CLI access to the HOST's daemon. This is host-root-
+      # equivalent access — anything that can reach this socket can run an unsandboxed
+      # container with an arbitrary bind mount, which is as good as root on the host. That
+      # tradeoff is what makes running backend-api containerized (vs. this repo's documented
+      # default of a bare `dotnet run`, see campus-backend/CLAUDE.md) a deliberate decision,
+      # not a default one — see DockerCodeRunner.cs's doc comment for the fuller rationale.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Shared workdir for code submissions — must be the same directory on both sides of the
+      # DooD boundary (see CodeRunner__HostTempDir above): this container writes a submission's
+      # files here at /coderun-tmp/<id>, then asks the HOST daemon to bind-mount
+      # {CODERUN_HOST_TEMP_DIR}/<id> (the same directory, seen from the host's own path) into
+      # the sibling per-submission container it starts.
+      - ./coderun-tmp:/coderun-tmp
     depends_on:
       postgres:
         condition: service_healthy
