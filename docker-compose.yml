@@ -67,6 +67,9 @@ services:
     container_name: campus-backend-api
     restart: unless-stopped
     environment:
+      # Local dev only — enables DevSeedHostedService (bootstrap admin/student accounts) and
+      # /openapi. Never set this in a real deployment.
+      ASPNETCORE_ENVIRONMENT: Development
       # Cut over to the least-privilege campus_app role (#137) provisioned by
       # db/init/03_create_app_role.sh instead of the campus superuser — backend-api
       # only ever does row-level CRUD, never DDL/role/database administration.
