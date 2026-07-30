@@ -81,6 +81,11 @@ services:
       # Set JWT_SIGNING_KEY in the shell/.env before `docker compose up`; never commit a real value.
       Jwt__Key: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY before starting backend-api}
       AiServices__BaseUrl: "http://ai-services:8000"
+      # B1 remote-execution fallback (SDA/SEK plan) — RemoteCodeRunner talks to this only
+      # when ContainerCodeRunner (the primary, Docker/Podman-backed) reports no local
+      # runtime or an infra failure. See PistonClient.cs's doc comment for why Piston,
+      # not judge0-server below, is what's actually wired in as of the 0.1 spike.
+      Piston__BaseUrl: "http://piston:2000"
       # AIS-02: Copyleaks credentials — sourced from the host/CI environment (or a
       # gitignored .env file), never hardcoded here. Left unset, backend-api's
       # plagiarism-check endpoint fails closed with a 503 rather than crashing.
@@ -129,10 +134,34 @@ services:
         condition: service_healthy
       ai-services:
         condition: service_healthy
+      piston:
+        condition: service_started
     # Defense-in-depth container ceiling (#138).
     mem_limit: 1g
     cpus: 1.0
     pids_limit: 256
+
+  # B1 remote-execution fallback (SDA/SEK plan) — see PistonClient.cs's doc comment.
+  # Confirmed working end-to-end on this class of host (cgroup v2, no isolate/cgroup v1
+  # dependency the way judge0-server/judge0-workers below have) during the 0.1 spike:
+  # real package install + real execution, correct output. `--privileged` matches
+  # Piston's own reference deployment docs — it sandboxes each execution itself
+  # (nsjail-based), this is not the same "judge0 needs host-privileged isolate" tradeoff
+  # documented on judge0-server below.
+  piston:
+    image: ghcr.io/engineer-man/piston
+    container_name: campus-piston
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "127.0.0.1:2000:2000" # loopback-only; backend-api reaches it over the compose network
+    volumes:
+      - campus-piston-packages:/piston
+    # Container-level ceiling (#138) — same rationale as judge0-server/workers below:
+    # this runs untrusted student code, don't rely on Piston's own defaults alone.
+    mem_limit: 1.5g
+    cpus: 1.5
+    pids_limit: 512
 
   authz:
     image: openfga/openfga:latest
@@ -198,6 +227,19 @@ services:
     # any non-dev deploy.
     command: ["redis-server", "--requirepass", "judge0_redis_dev"]
 
+  # STATUS (2026-07-30, 0.1/B1 spike): kept in place but NOT what's actually wired into
+  # backend-api's RemoteCodeRunner — see `piston` above. The Redis-connectivity bug that
+  # blocked judge0-workers is now understood and fixed (see judge0.conf's own "RESOLVED"
+  # log entry — it was CRLF line endings corrupting env vars, plus an unrelated Docker
+  # embedded-DNS flake), but the deeper blocker isn't fixable from this file: isolate
+  # (judge0-server/workers' actual sandbox) requires cgroup v1, and hosts in this class
+  # (WSL2/Docker Desktop, and likely most modern distros) are cgroup v2-only — confirmed
+  # directly (`Failed to create control group /sys/fs/cgroup/memory/box-N/`). Piston
+  # doesn't share that dependency and was confirmed working end-to-end on the same host.
+  # Left running rather than removed, same rationale campus-backend/CLAUDE.md already
+  # documented for the pre-fix state — nothing depends on deleting it, and the fixed
+  # Redis config is worth keeping in case a cgroup v1-capable host is used later.
+  #
   # Code Execution Service (CEX) — runs untrusted student code (SEK-01).
   # Both containers below run `privileged: true`. This matches Judge0's own
   # reference docker-compose: isolate's cgroup/namespace sandboxing needs it
@@ -277,3 +319,4 @@ volumes:
   campus-pg-data:
   campus-judge0-db-data:
   campus-backend-keys:
+  campus-piston-packages:
