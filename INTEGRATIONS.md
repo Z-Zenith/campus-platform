@@ -61,3 +61,9 @@ pointing at the sibling clones above, or pinned images once a publishing pipelin
   `feature/twa-fixes-track1-track2-bundle` (PRs #18/#9) merging first — deliberately not
   touched while that branch is under active development, to avoid colliding with in-flight
   work. Re-pin once merged.
+- `campus-shared-editor-kit` has already moved past `0.2.1`/`host-0.2.1` — `0.3.0`/`host-0.8.0`
+  are cut and include the SEK-04 image-search restore, the Notes rich-text rewrite, and the
+  Coding app's VS Code-style panel/terminal work. No consumer (`campus-teacher-web`,
+  `campus-student-desktop`) has adopted either yet, so `0.2.1`/`host-0.2.1` stays the "current
+  compatible set" above by this doc's own known-compatible-not-just-latest definition — flagged
+  here so the next refresh doesn't have to rediscover the gap.
