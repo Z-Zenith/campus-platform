@@ -8,11 +8,12 @@ services:
       POSTGRES_USER: campus
       # Required — no default. Mirrors the JWT_SIGNING_KEY fail-fast pattern
       # below: set POSTGRES_PASSWORD in the shell/.env before `docker compose
-      # up` (see .env.example). Also read by db/init/03_create_app_role.sh to
+      # up` (see .env.example). Also read by campus-backend's
+      # db/init/03_create_app_role.sh (sibling clone, mounted below) to
       # provision the least-privilege campus_app role (#137).
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD before starting postgres}
       # Dev-only default documented in .env.example; rotate before any
-      # non-dev deploy. See db/init/03_create_app_role.sh (#137).
+      # non-dev deploy. See ../campus-backend/db/init/03_create_app_role.sh (#137).
       POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-campus_app_dev}
     ports:
       - "5432:5432"
@@ -71,11 +72,13 @@ services:
       # /openapi. Never set this in a real deployment.
       ASPNETCORE_ENVIRONMENT: Development
       # Cut over to the least-privilege campus_app role (#137) provisioned by
-      # db/init/03_create_app_role.sh instead of the campus superuser — backend-api
-      # only ever does row-level CRUD, never DDL/role/database administration.
-      # POSTGRES_APP_PASSWORD is required (see postgres service above) and reused
-      # here so the two never drift. Program.cs also fails fast outside Development
-      # if this still resolves to the committed appsettings.json dev placeholder.
+      # campus-backend's db/init/03_create_app_role.sh (sibling clone, mounted
+      # into the postgres service above at ../campus-backend/db/init) instead
+      # of the campus superuser — backend-api only ever does row-level CRUD,
+      # never DDL/role/database administration. POSTGRES_APP_PASSWORD is
+      # required (see postgres service above) and reused here so the two never
+      # drift. Program.cs also fails fast outside Development if this still
+      # resolves to the committed appsettings.json dev placeholder.
       ConnectionStrings__Campus: "Host=postgres;Port=5432;Database=campus;Username=campus_app;Password=${POSTGRES_APP_PASSWORD:-campus_app_dev}"
       # Required in non-Development environments — backend-api fails fast at startup if unset.
       # Set JWT_SIGNING_KEY in the shell/.env before `docker compose up`; never commit a real value.
