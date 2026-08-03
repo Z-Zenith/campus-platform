@@ -41,7 +41,7 @@
 
 | New repo | Contents |
 |---|---|
-| `campus-platform` | `docker-compose.yml`, `.env.example`, `.gitignore`, `.gitattributes`, shared GitHub workflows (`codeql.yml`, `semgrep.yml`, `stale.yml`, `dependabot.yml`, `auto-merge-on-approval.yml`, `dependabot-auto-merge.yml`), `docs/`, `LICENSE`, `services/authz/`, `services/code-execution/`. Does not run any application — orchestrates pinned images from the per-app repos. |
+| `campus-platform` | `docker-compose.yml`, `.env.example`, `.gitignore`, `.gitattributes`, shared GitHub workflows (`semgrep.yml`, `stale.yml`, `dependabot.yml`, `auto-merge-on-approval.yml`, `dependabot-auto-merge.yml`), `docs/`, `LICENSE`, `services/authz/`, `services/code-execution/`. Does not run any application — orchestrates pinned images from the per-app repos. A `codeql.yml` was tried here and removed (no `.csproj`/`.cs`/scannable-language source lives in this repo post-split — it's entirely YAML/Markdown/SQL/shell; Semgrep covers what applies). Don't re-add it unless this repo starts carrying analyzable application code again. |
 
 ### Explicitly removed
 

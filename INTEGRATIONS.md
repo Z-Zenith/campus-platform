@@ -35,18 +35,27 @@ known-compatible with which others.
 
 ## Bootstrap: cloning the full set
 
+`docker-compose.yml`'s `build:` contexts (`../campus-backend`, `../campus-ai-services`) and the
+`postgres` service's init-script mount (`../campus-backend/db/init`) are relative paths, so
+`campus-backend` and `campus-ai-services` must be cloned as **siblings of this `campus-platform`
+clone** — i.e. clone everything into one common parent directory, not nested inside
+`campus-platform/`:
+
 ```bash
+mkdir campus && cd campus   # any common parent directory works
+git clone "https://github.com/Z-Zenith/campus-platform.git"
 for repo in campus-admin-web campus-teacher-web campus-parent-portal campus-student-desktop \
             campus-ai-services campus-backend campus-api-client campus-shared-editor-kit \
             campus-direct-messaging; do
   git clone "https://github.com/Z-Zenith/$repo.git"
 done
+cd campus-platform
 ```
 
-Then `docker compose up -d` from this repo brings up Postgres, OpenFGA (`services/authz/`),
-the Judge0-based Code Execution Service (`services/code-execution/`), and — via `build:` contexts
-pointing at the sibling clones above, or pinned images once a publishing pipeline exists —
-`campus-backend` and `campus-ai-services`.
+Then `docker compose up -d` (run from inside the `campus-platform` clone) brings up Postgres,
+OpenFGA (`services/authz/`), the Judge0-based Code Execution Service (`services/code-execution/`),
+and — via `build:` contexts pointing at the sibling clones above, or pinned images once a
+publishing pipeline exists — `campus-backend` and `campus-ai-services`.
 
 ## Known gaps at cutover
 
